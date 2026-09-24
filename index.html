@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>俄羅斯大探險：地理知識挑戰</title>
+    <!-- 引入 Tailwind CSS 進行快速樣式排版 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f0fdf4; /* 淺綠色背景 */
+            background-image: radial-gradient(#dcfce7 1px, transparent 1px);
+            background-size: 20px 20px;
+            overflow-x: hidden;
+        }
+
+        /* SVG 地圖區域的互動效果 */
+        .map-region {
+            transition: all 0.3s ease;
+            cursor: pointer;
+            stroke: #ffffff;
+            stroke-width: 2;
+            fill-opacity: 0.4; /* 使顏色更透明，顯示底圖 */
+            -webkit-tap-highlight-color: transparent; /* 平板觸控優化：移除點擊閃爍 */
+        }
+        
+        .map-region:hover {
+            filter: brightness(1.15) drop-shadow(0 0 10px rgba(255,255,255,0.8));
+            stroke-width: 4;
+            stroke: #fbbf24; /* 琥珀色邊框 */
+            transform: scale(1.01);
+            transform-origin: center;
+        }
+
+        .map-region.completed {
+            fill: #9ca3af !important; /* 完成後變成灰色 */
+            opacity: 0.6;
+            cursor: default;
+        }
+        .map-region.completed:hover {
+            filter: none;
+            stroke-width: 2;
+            stroke: #ffffff;
+            transform: none;
+        }
+
+        /* 答錯時的震動動畫 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+        .shake-animation {
+            animation: shake 0.4s ease-in-out;
+        }
+
+        /* 選項按鈕樣式 */
+        .option-btn {
+            transition: all 0.2s;
+        }
+        .option-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .option-btn.correct {
+            background-color: #10b981; /* 綠色 */
+            color: white;
+            border-color: #059669;
+        }
+        .option-btn.wrong {
+            background-color: #ef4444; /* 紅色 */
+            color: white;
+            border-color: #dc2626;
+            opacity: 0.7;
+        }
+        
+        /* 隱藏元素用 */
+        .hidden-element {
+            display: none !important;
+        }
+
+        /* 俄羅斯娃娃解鎖動畫 */
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .piece-unlocked {
+            animation: popIn 0.5s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-blue-800 text-white p-4 shadow-lg sticky top-0 z-10">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black tracking-wider text-yellow-400">🇷🇺 俄羅斯大探險</h1>
+                <p class="text-blue-200 text-sm mt-1">國三地理：地形、氣候與人文特色挑戰</p>
+            </div>
+            <div class="flex items-center gap-4 bg-blue-900 px-4 md:px-6 py-2 rounded-full border border-blue-700 shadow-inner">
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-blue-300">探險分數</span>
+                    <span id="score-display" class="text-xl md:text-2xl font-bold text-green-400">100</span>
+                </div>
+                <div class="w-px h-8 bg-blue-700"></div>
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-blue-300">俄羅斯娃娃</span>
+                    <span class="text-base md:text-lg font-bold"><span id="header-puzzle-progress">0</span> / 10</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 調整排版：平板橫向/直向優化，套娃強制置於右上方，並大幅放心地圖 -->
+    <main class="flex-grow flex flex-col md:flex-row items-center md:items-start justify-center p-4 max-w-[95rem] mx-auto w-full gap-4 md:gap-6 relative">
+        
+        <!-- 遊戲開始說明遮罩 -->
+        <div id="start-overlay" class="absolute inset-0 bg-black/60 z-20 flex items-center justify-center rounded-2xl backdrop-blur-sm">
+            <div class="bg-white p-8 rounded-2xl max-w-lg text-center shadow-2xl">
+                <h2 class="text-3xl font-black text-blue-800 mb-4">歡迎來到俄羅斯！</h2>
+                <p class="text-gray-600 mb-6 text-left leading-relaxed">
+                    身為探險家，你的任務是穿越廣大的俄羅斯，從歐洲一路向東前往太平洋沿岸。<br><br>
+                    🗺️ <b>玩法說明：</b><br>
+                    1. 點擊地圖上發光的區域接受挑戰（注意：地圖上沒有文字提示喔！）。<br>
+                    2. 每區有 2 道題目，答對可獲得 20 分與「<b>1塊俄羅斯娃娃碎片</b>」。<br>
+                    3. 答錯扣 10 分，你可以重新嘗試直到答對！<br>
+                    4. 集齊 10 片碎片，拼出完整的俄羅斯娃娃即可通關！<br>
+                    準備好接受挑戰了嗎？
+                </p>
+                <button onclick="startGame()" class="bg-yellow-500 hover:bg-yellow-400 text-blue-900 font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105 text-lg">
+                    開始探險
+                </button>
+            </div>
+        </div>
+
+        <!-- 俄羅斯 SVG 向量地圖 (大幅增加寬度比例) -->
+        <div class="w-full md:w-3/4 lg:w-4/5 bg-blue-50/50 rounded-3xl shadow-xl border-4 border-white overflow-hidden relative order-2 md:order-1 flex-grow">
+            <!-- 減少 viewBox 高度，讓地圖更寬扁，填滿空間 -->
+            <svg id="russia-map" viewBox="0 0 1000 450" class="w-full h-auto drop-shadow-md cursor-crosshair">
+                <!-- 網格背景增加地圖感 -->
+                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#cbd5e1" stroke-width="0.5"/>
+                </pattern>
+                <rect width="100%" height="100%" fill="url(#grid)" />
+                <image href="俄羅斯2.jpg" x="0" y="0" width="1000" height="450" preserveAspectRatio="xMidYMid slice" />
+                
+                <!-- 經緯線裝飾 -->
+                <line x1="200" y1="0" x2="200" y2="450" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,5" opacity="0.3"/>
+                <line x1="400" y1="0" x2="400" y2="450" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,5" opacity="0.3"/>
+                <line x1="600" y1="0" x2="600" y2="450" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,5" opacity="0.3"/>
+                <line x1="800" y1="0" x2="800" y2="450" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,5" opacity="0.3"/>
+                
+                <line x1="0" y1="150" x2="1000" y2="150" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,5" opacity="0.3"/>
+                <line x1="0" y1="300" x2="1000" y2="300" stroke="#94a3b8" stroke-width="1" stroke-dasharray="5,5" opacity="0.3"/>
+
+                <!-- 海洋/背景裝飾 (微調形狀以適應新的 viewBox) -->
+                <path d="M 0 0 L 1000 0 L 1000 80 Q 800 130 500 60 Q 200 30 0 80 Z" fill="#bae6fd" opacity="0.6"/> 
+
+                <!-- 1. 歐俄平原 -->
+                <path id="region-europe" class="map-region" fill="#86efac" 
+                      d="M 50 130 C 150 100 220 80 280 100 L 260 400 C 180 430 80 380 50 330 Z" 
+                      onclick="handleRegionClick('europe')" />
+                
+                <!-- 2. 烏拉爾山 (作為分界) -->
+                <path id="region-ural" class="map-region" fill="#d6d3d1" 
+                      d="M 280 100 C 300 130 320 260 290 400 L 260 400 C 290 260 270 130 280 100 Z" 
+                      onclick="handleRegionClick('ural')" />
+
+                <!-- 3. 西部西伯利亞平原 -->
+                <path id="region-west" class="map-region" fill="#bef264" 
+                      d="M 280 100 C 380 70 480 90 520 130 C 550 260 480 400 290 400 C 320 260 300 130 280 100 Z" 
+                      onclick="handleRegionClick('west')" />
+
+                <!-- 4. 中部西伯利亞高原 -->
+                <path id="region-central" class="map-region" fill="#fcd34d" 
+                      d="M 520 130 C 650 60 750 100 780 180 C 800 330 700 430 480 400 C 550 260 520 130 520 130 Z" 
+                      onclick="handleRegionClick('central')" />
+
+                <!-- 5. 東部西伯利亞山地 -->
+                <path id="region-east" class="map-region" fill="#fdba74" 
+                      d="M 780 180 C 880 80 980 160 960 260 C 920 400 820 460 700 430 C 800 330 780 180 780 180 Z" 
+                      onclick="handleRegionClick('east')" />
+            </svg>
+        </div>
+
+        <!-- 俄羅斯娃娃收集區 (縮小並固定在右側) -->
+        <div class="w-full sm:w-48 md:w-1/4 lg:w-1/5 bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border-4 border-yellow-400 p-3 md:p-4 flex flex-col items-center sticky top-24 order-1 md:order-2 self-end md:self-start mb-2 md:mb-0 z-10 transition-transform hover:scale-105">
+            <h3 class="text-lg md:text-xl font-black text-red-600 mb-1">🪆 俄羅斯娃娃</h3>
+            <p class="text-gray-500 text-xs mb-3 text-center leading-tight">解鎖全部碎片！</p>
+            
+            <!-- 大幅縮小套娃容器 -->
+            <div class="relative w-20 h-32 md:w-24 md:h-40 bg-yellow-50 rounded-[1.5rem] shadow-inner border-[3px] border-yellow-200 overflow-hidden">
+                <!-- 完整的套娃 SVG -->
+                <svg viewBox="0 0 200 300" class="w-full h-full absolute inset-0 drop-shadow-sm">
+                    <!-- Doll Body -->
+                    <path d="M 50,280 C 10,280 10,180 30,150 C 40,130 40,110 50,100 C 50,50 150,50 150,100 C 160,110 160,130 170,150 C 190,180 190,280 150,280 Z" fill="#ef4444"/>
+                    <!-- Face Base -->
+                    <circle cx="100" cy="90" r="35" fill="#fef08a"/>
+                    <!-- Headpiece Border -->
+                    <path d="M 65,90 A 35 35 0 0 1 135 90" fill="none" stroke="#b91c1c" stroke-width="8"/>
+                    <!-- Eyes & Cheeks -->
+                    <circle cx="85" cy="85" r="4" fill="#000"/>
+                    <circle cx="115" cy="85" r="4" fill="#000"/>
+                    <circle cx="75" cy="95" r="5" fill="#fca5a5" opacity="0.8"/>
+                    <circle cx="125" cy="95" r="5" fill="#fca5a5" opacity="0.8"/>
+                    <!-- Mouth -->
+                    <path d="M 90,105 Q 100,115 110,105" fill="none" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
+                    <!-- Belly Decoration -->
+                    <circle cx="100" cy="200" r="45" fill="#fcd34d"/>
+                    <!-- Flower -->
+                    <path d="M 100,175 Q 115,155 125,175 Q 145,185 125,200 Q 115,225 100,200 Q 85,185 100,175" fill="#3b82f6"/>
+                    <circle cx="100" cy="188" r="10" fill="#ef4444"/>
+                    <!-- Decorative Dots -->
+                    <circle cx="100" cy="225" r="4" fill="#1d4ed8"/>
+                    <circle cx="80" cy="210" r="4" fill="#1d4ed8"/>
+                    <circle cx="120" cy="210" r="4" fill="#1d4ed8"/>
+                </svg>
+
+                <!-- 遮罩網格 (10 塊拼圖遮罩，無縫貼合) -->
+                <div class="absolute inset-0 grid grid-cols-2 grid-rows-5">
+                    <div id="piece-0" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-1" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-2" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-3" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-4" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-5" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-6" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-7" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-8" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                    <div id="piece-9" class="bg-gray-400 border border-gray-500 transition-all duration-500 origin-center"></div>
+                </div>
+            </div>
+            
+            <p class="mt-3 md:mt-4 font-bold text-gray-700 text-sm md:text-base">進度: <span id="puzzle-progress" class="text-lg md:text-xl text-red-600">0</span> / 10</p>
+        </div>
+    </main>
+
+    <!-- 問答對話框 (Modal) -->
+    <div id="question-modal" class="fixed inset-0 bg-blue-900/80 z-50 flex items-center justify-center p-4 hidden-element backdrop-blur-sm">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <!-- Modal 標題區 -->
+            <div class="bg-blue-600 p-4 flex justify-between items-center text-white">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">📍</span>
+                    <h3 id="modal-region-title" class="text-xl font-bold">區域名稱</h3>
+                </div>
+                <div class="bg-blue-800 px-3 py-1 rounded-full text-sm font-semibold shadow-inner">
+                    得分: <span id="modal-score" class="text-yellow-400">100</span>
+                </div>
+            </div>
+            
+            <!-- Modal 內容區 -->
+            <div class="p-6 md:p-8 overflow-y-auto flex-grow">
+                <!-- 情境題文 -->
+                <div class="mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                    <p id="question-text" class="text-lg md:text-xl font-medium text-gray-800 leading-relaxed"></p>
+                </div>
+
+                <!-- 選項按鈕區 -->
+                <div id="options-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- 按鈕將透過 JS 動態產生 -->
+                </div>
+
+                <!-- 回饋訊息 (答對/答錯) -->
+                <div id="feedback-message" class="mt-6 p-4 rounded-xl hidden-element text-center font-bold text-lg">
+                </div>
+
+                <!-- 原因解釋區 (答對才顯示) -->
+                <div id="explanation-box" class="mt-4 p-5 bg-green-50 border border-green-200 rounded-xl hidden-element">
+                    <h4 class="text-green-800 font-bold mb-2 flex items-center gap-2">
+                        <span>💡</span> 知識點解析：
+                    </h4>
+                    <p id="explanation-text" class="text-gray-700 leading-relaxed"></p>
+                </div>
+            </div>
+
+            <!-- Modal 底部按鈕區 -->
+            <div class="bg-gray-100 p-4 flex justify-end border-t border-gray-200">
+                <button id="close-modal-btn" onclick="closeModal()" class="hidden-element bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg shadow transition">
+                    繼續探險
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊戲完成畫面 -->
+    <div id="finish-screen" class="fixed inset-0 bg-green-900/90 z-50 flex items-center justify-center p-4 hidden-element backdrop-blur-md">
+        <div class="bg-white p-10 rounded-3xl max-w-lg text-center shadow-2xl">
+            <div class="text-6xl mb-4">🪆</div>
+            <h2 class="text-3xl font-black text-green-800 mb-2">探險完成！</h2>
+            <p class="text-gray-600 mb-6">你已經成功集齊套娃碎片，橫跨了整個俄羅斯，並掌握了當地的地理與人文知識！</p>
+            <div class="bg-green-100 p-6 rounded-2xl mb-8">
+                <p class="text-sm text-green-700 font-bold uppercase tracking-widest mb-1">最終分數</p>
+                <p id="final-score" class="text-5xl font-black text-green-600">100</p>
+            </div>
+            <button onclick="location.reload()" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transform transition hover:scale-105">
+                再玩一次
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 遊戲狀態變數
+        let currentScore = 100;
+        let collectedPieces = 0; // 收集到的套娃碎片數量 (共10片)
+        let activeRegionId = null;
+        let currentQuestion = null;
+
+        // 題目資料庫 (每區擴增為兩題，共十題)
+        const questionsData = {
+            'europe': {
+                name: '歐俄平原',
+                questions: [
+                    {
+                        text: '你來到莫斯科著名的紅場，看到色彩繽紛、有著「洋蔥頭」圓頂的聖巴西爾大教堂。請問這種獨特的建築風格，代表了當地多數居民信仰哪一種宗教？',
+                        options: ['羅馬天主教', '東正教', '伊斯蘭教', '佛教'],
+                        correctIndex: 1,
+                        explanation: '俄羅斯歐洲部分人口密集，主要民族為斯拉夫族，文化上深受拜占庭帝國影響，因此多數居民信仰「東正教」。洋蔥狀的圓頂是東正教教堂的經典特色。',
+                        answered: false
+                    },
+                    {
+                        text: '冬天到了，你在莫斯科的餐廳點了一碗熱騰騰的「羅宋湯」，裡面滿滿的甜菜根和馬鈴薯。俄羅斯人喜歡高熱量飲食和喝伏特加，主要是為了適應哪種氣候特徵？',
+                        options: ['夏季高溫多雨', '冬季漫長嚴寒', '氣候乾燥少雨', '終年溫和濕潤'],
+                        correctIndex: 1,
+                        explanation: '俄羅斯大部分地區屬於溫帶大陸性氣候與寒帶氣候，緯度高導致「冬季漫長且嚴寒」。為了禦寒，當地居民發展出攝取高熱量食物（如肉類、根莖類）及烈酒的生活習慣。',
+                        answered: false
+                    }
+                ]
+            },
+            'ural': {
+                name: '烏拉爾山',
+                questions: [
+                    {
+                        text: '你正搭乘西伯利亞鐵路，列車廣播說即將跨越一座傳統上被視為歐洲與亞洲分界線的山脈。這座山脈是？',
+                        options: ['阿爾卑斯山', '喜馬拉雅山', '高加索山', '烏拉爾山'],
+                        correctIndex: 3,
+                        explanation: '「烏拉爾山」呈南北走向，地勢雖然不高，但在地理與文化上，傳統上被視為劃分歐洲與亞洲的天然界線。',
+                        answered: false
+                    },
+                    {
+                        text: '烏拉爾山脈雖然不高，但卻是俄羅斯重要的工業區。請問這裡主要依賴當地豐富的哪一類資源來發展重工業？',
+                        options: ['農產資源', '森林資源', '礦產資源', '漁業資源'],
+                        correctIndex: 2,
+                        explanation: '烏拉爾山脈富含鐵、銅等多種金屬礦產資源，憑藉著這些豐富的礦藏，當地發展出極為發達的鋼鐵及機械等重工業。',
+                        answered: false
+                    }
+                ]
+            },
+            'west': {
+                name: '西部西伯利亞平原',
+                questions: [
+                    {
+                        text: '探險隊來到了鄂畢河流域，這裡地勢極度平坦，因為排水不良，夏季冰雪融化時容易形成廣大的沼澤。請問你目前位在俄羅斯的哪一個地形區？',
+                        options: ['歐俄平原', '西部西伯利亞平原', '中部西伯利亞高原', '東部西伯利亞山地'],
+                        correctIndex: 1,
+                        explanation: '過了烏拉爾山向東，首先會抵達極度平坦的「西部西伯利亞平原」。這裡因為地勢低平、河川流向北極海易生冰海，導致夏季常有沼澤遍布。',
+                        answered: false
+                    },
+                    {
+                        text: '雖然西部西伯利亞平原面積廣大且地勢平坦，但農業發展卻十分受限。除了沼澤遍布外，最主要的氣候限制因素是什麼？',
+                        options: ['降水過多，易生水患', '終年高溫，蒸發旺盛', '氣候太過乾燥，缺乏水源', '冬季漫長且嚴寒，生長季短'],
+                        correctIndex: 3,
+                        explanation: '該地區位於高緯度內陸，屬於溫帶大陸性氣候與寒帶氣候，冬季非常漫長且極度寒冷，農作物生長季極短，因此不適合大規模農業發展。',
+                        answered: false
+                    }
+                ]
+            },
+            'central': {
+                name: '中部西伯利亞高原',
+                questions: [
+                    {
+                        text: '你參觀了一個巨大的露天鑽石與天然氣礦區。俄羅斯西伯利亞地區雖然氣候惡劣、人口稀少，但卻是國家經濟的重要命脈，這主要是因為該地區擁有？',
+                        options: ['廣大的小麥農產區', '豐富的漁業資源', '豐富的礦產與能源', '發達的觀光旅遊業'],
+                        correctIndex: 2,
+                        explanation: '西伯利亞地區雖然環境嚴酷導致人口分布不均，但擁有極為豐富的「礦產與能源」（如石油、天然氣、煤礦、鑽石）。這些礦產的外銷是俄羅斯重要的經濟支柱。',
+                        answered: false
+                    },
+                    {
+                        text: '中西伯利亞高原上的主要河川（如葉尼塞河）是由南向北流入北極海。每到春季，這些河川往往會發生「凌汛」（冰雪阻塞河道導致氾濫），主要原因為何？',
+                        options: ['下游緯度高融冰較晚，阻擋上游流水', '春季暴雨頻繁，河水暴漲', '上游水庫無預警大量洩洪', '北極海海水倒灌進入河道'],
+                        correctIndex: 0,
+                        explanation: '由於河川向北流，春季時較低緯度（較溫暖）的上游先融冰，但高緯度（較寒冷）的下游依然結冰，導致流動的水被冰壩阻塞而溢出河道，形成「凌汛」。',
+                        answered: false
+                    }
+                ]
+            },
+            'east': {
+                name: '東部西伯利亞山地',
+                questions: [
+                    {
+                        text: '在東伯利亞的奧伊米亞康村（世界最冷村莊），你發現當地的房屋都建在深深打入地下的木樁上，與地面保持距離。這是為了避免房屋的熱氣融化地下哪一種特殊的地質現象，導致房屋倒塌？',
+                        options: ['地下水層', '永凍土', '石灰岩洞', '火山岩漿'],
+                        correctIndex: 1,
+                        explanation: '這裡屬於寒帶氣候，地表下有深厚的「永凍土」。如果房屋直接建在地面，暖氣會融化永凍土導致地基下陷，因此必須採用高架設計。',
+                        answered: false
+                    },
+                    {
+                        text: '旅程的終點來到了太平洋沿岸的海參崴（符拉迪沃斯托克）。這裡的氣候與俄羅斯內陸大不相同，受到海洋與季風影響，夏季較為溫暖濕潤。請問這屬於哪一種氣候類型？',
+                        options: ['溫帶地中海型氣候', '溫帶大陸性氣候', '溫帶季風氣候', '寒帶氣候'],
+                        correctIndex: 2,
+                        explanation: '俄羅斯極東的太平洋沿岸，因面臨海洋，夏季吹東南季風帶來降水，冬季受西伯利亞高壓影響吹西北風，屬於「溫帶季風氣候」。',
+                        answered: false
+                    }
+                ]
+            }
+        };
+
+        // DOM 元素選取
+        const scoreDisplay = document.getElementById('score-display');
+        const headerPuzzleProgress = document.getElementById('header-puzzle-progress');
+        const puzzleProgress = document.getElementById('puzzle-progress');
+        const modalScore = document.getElementById('modal-score');
+        const questionModal = document.getElementById('question-modal');
+        const startOverlay = document.getElementById('start-overlay');
+        const modalRegionTitle = document.getElementById('modal-region-title');
+        const questionText = document.getElementById('question-text');
+        const optionsContainer = document.getElementById('options-container');
+        const feedbackMessage = document.getElementById('feedback-message');
+        const explanationBox = document.getElementById('explanation-box');
+        const explanationText = document.getElementById('explanation-text');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const finishScreen = document.getElementById('finish-screen');
+        const finalScore = document.getElementById('final-score');
+
+        function startGame() {
+            startOverlay.classList.add('hidden-element');
+            updateScore(0);
+        }
+
+        function updateScore(change) {
+            currentScore += change;
+            if(currentScore < 0) currentScore = 0; 
+            
+            scoreDisplay.innerText = currentScore;
+            modalScore.innerText = currentScore;
+            
+            if (currentScore > 100) scoreDisplay.className = 'text-2xl font-bold text-green-400';
+            else if (currentScore < 60) scoreDisplay.className = 'text-2xl font-bold text-red-400';
+            else scoreDisplay.className = 'text-2xl font-bold text-yellow-400';
+        }
+
+        function handleRegionClick(regionId) {
+            const region = questionsData[regionId];
+            
+            // 找出該區域尚未回答的題目
+            const unansweredQuestions = region.questions.filter(q => !q.answered);
+            
+            // 如果該區域的 2 題都答完了，不再觸發
+            if (unansweredQuestions.length === 0) {
+                return;
+            }
+
+            activeRegionId = regionId;
+            modalRegionTitle.innerText = `探索：${region.name} (剩餘 ${unansweredQuestions.length} 題)`;
+            
+            // 挑選第一題尚未作答的題目
+            currentQuestion = unansweredQuestions[0];
+
+            renderQuestion(currentQuestion);
+            openModal();
+        }
+
+        function renderQuestion(qData) {
+            questionText.innerText = qData.text;
+            optionsContainer.innerHTML = '';
+            feedbackMessage.className = 'hidden-element';
+            explanationBox.classList.add('hidden-element');
+            closeModalBtn.classList.add('hidden-element');
+
+            qData.options.forEach((option, index) => {
+                const btn = document.createElement('button');
+                btn.className = 'option-btn w-full text-left p-4 rounded-xl border-2 border-blue-200 bg-white text-gray-700 font-medium hover:bg-blue-50 focus:outline-none';
+                
+                const letter = String.fromCharCode(65 + index);
+                btn.innerHTML = `<span class="inline-block w-8 font-bold text-blue-500">${letter}.</span> ${option}`;
+                
+                btn.onclick = () => handleAnswer(index, btn);
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        function handleAnswer(selectedIndex, btnElement) {
+            // 已答對則禁止點擊
+            if (!closeModalBtn.classList.contains('hidden-element')) return;
+
+            const isCorrect = (selectedIndex === currentQuestion.correctIndex);
+
+            if (isCorrect) {
+                updateScore(20); 
+                currentQuestion.answered = true; // 標記此題為已過關
+                collectedPieces++; // 獲得一片套娃
+                
+                btnElement.classList.add('correct');
+                btnElement.classList.remove('border-blue-200', 'hover:bg-blue-50');
+                
+                Array.from(optionsContainer.children).forEach(child => {
+                    if(child !== btnElement) {
+                        child.disabled = true;
+                        child.style.opacity = '0.5';
+                    }
+                });
+
+                // UI：解鎖拼圖遮罩 (加入縮小消失動畫)
+                const pieceElement = document.getElementById(`piece-${collectedPieces - 1}`);
+                if (pieceElement) {
+                    pieceElement.style.transform = 'scale(0) rotate(10deg)'; 
+                    pieceElement.style.opacity = '0';
+                    setTimeout(() => {
+                        pieceElement.style.display = 'none'; // 動畫結束後徹底隱藏
+                    }, 500);
+                }
+                
+                headerPuzzleProgress.innerText = collectedPieces;
+                puzzleProgress.innerText = collectedPieces;
+
+                feedbackMessage.innerHTML = '🎉 恭喜答對！獲得 20 分與 <b>1 塊俄羅斯娃娃碎片🪆</b>';
+                feedbackMessage.className = 'mt-6 p-4 rounded-xl text-center font-bold text-lg bg-green-100 text-green-700';
+                
+                explanationText.textContent = currentQuestion.explanation;
+                explanationBox.classList.remove('hidden-element');
+                
+                closeModalBtn.classList.remove('hidden-element');
+
+            } else {
+                updateScore(-10); 
+                
+                btnElement.classList.add('wrong', 'shake-animation');
+                btnElement.classList.remove('border-blue-200', 'hover:bg-blue-50');
+                
+                setTimeout(() => {
+                    btnElement.classList.remove('shake-animation');
+                }, 400);
+
+                feedbackMessage.textContent = '❌ 答錯了，扣 10 分。請再看清楚題目，再試一次！';
+                feedbackMessage.className = 'mt-6 p-3 rounded-xl text-center font-bold bg-red-100 text-red-700';
+            }
+        }
+
+        function openModal() {
+            questionModal.classList.remove('hidden-element');
+            document.body.style.overflow = 'hidden'; 
+        }
+
+        function closeModal() {
+            questionModal.classList.add('hidden-element');
+            document.body.style.overflow = 'auto';
+            
+            // 檢查該區域的題目是否「全部」答完，全答完才將地圖變灰
+            const region = questionsData[activeRegionId];
+            const allAnswered = region.questions.every(q => q.answered);
+            
+            if (allAnswered) {
+                const mapPath = document.getElementById(`region-${activeRegionId}`);
+                if(mapPath) {
+                    mapPath.classList.add('completed');
+                }
+            }
+            
+            // 檢查是否集齊 10 片碎片
+            if (collectedPieces === 10) {
+                setTimeout(showFinishScreen, 800); // 稍微延遲讓玩家欣賞完整的俄羅斯娃娃
+            }
+        }
+
+        function showFinishScreen() {
+            finalScore.innerText = currentScore;
+            // 更新結束畫面的文案
+            const finishText = document.querySelector('#finish-screen p');
+            if(finishText) {
+                finishText.innerText = '你已經成功集齊俄羅斯娃娃碎片，橫跨了整個俄羅斯，並掌握了當地的地理與人文知識！';
+            }
+            finishScreen.classList.remove('hidden-element');
+        }
+    </script>
+</body>
+</html>
